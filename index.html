@@ -1,13 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Saudi Arabia Incident Map</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- Leaflet CSS -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-
   <style>
     html, body, #map {
       width: 100%;
@@ -19,70 +16,67 @@
 </head>
 <body>
 
-<div id="map"></div>
+  <div id="map"></div>
 
-<!-- Leaflet JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let validStates = [];
 
-<script>
-  // Initialize map centered on Saudi Arabia
-  const map = L.map('map').setView([25.3, 45.0], 5); // lat, lon, zoom
+    const map = L.map('map').setView([25.3, 45.0], 5);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-  }).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19
+    }).addTo(map);
 
-  let markers = [];
+    let markers = [];
 
-  // Function to add markers to the map
-  function addPoints(states, lats, longs, counts) {
-    // Remove previous markers
-    markers.forEach(m => map.removeLayer(m));
-    markers = [];
+    function addPoints(states, lats, longs, counts) {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
 
-    for (let i = 0; i < states.length; i++) {
-      if (lats[i] === undefined || longs[i] === undefined) continue;
+      validStates = states;
 
-      const marker = L.circleMarker([lats[i], longs[i]], {
-        radius: Math.max(Math.sqrt(counts[i]), 4), // scale size by count
-        color: 'red',
-        fillOpacity: 0.5
-      }).addTo(map);
+      for (let i = 0; i < states.length; i++) {
+        if (lats[i] === undefined || longs[i] === undefined) continue;
 
-      const stateName = decodeURIComponent(states[i]);
+        const marker = L.circleMarker([lats[i], longs[i]], {
+          radius: Math.max(Math.sqrt(counts[i]), 4),
+          color: 'red',
+          fillOpacity: 0.5
+        }).addTo(map);
 
-      marker.bindTooltip(`${stateName}: ${counts[i]}`);
+        const stateName = decodeURIComponent(states[i]);
 
-      // Send selected state to Grafana when clicked
-      marker.on('click', function() {
-        console.log('[Map] Marker clicked:', stateName);
+        marker.bindTooltip(`${stateName}: ${counts[i]}`);
 
-        window.parent.postMessage({
-          type: 'STATE_SELECTED',
-          state: encodeURIComponent(stateName)
-        }, '*');
-      });
+        marker.on('click', function() {
+          const encodedState = encodeURIComponent(stateName);
+          if (validStates.includes(encodedState)) {
+            window.parent.postMessage({
+              type: 'STATE_SELECTED',
+              state: encodedState
+            }, '*');
+          } else {
+            console.warn('[Map] Click ignored, state not in validStates:', stateName);
+          }
+        });
 
-      markers.push(marker);
+        markers.push(marker);
+      }
+
+      if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.3));
+      }
     }
 
-    // Auto-zoom to marker bounds
-    if (markers.length > 0) {
-      const group = L.featureGroup(markers);
-      map.fitBounds(group.getBounds().pad(0.3));
-    }
-  }
+    window.addEventListener('message', function(event) {
+      const msg = event.data;
 
-  // Listen for INIT_DATA message from Grafana
-  window.addEventListener('message', function(event) {
-    const msg = event.data;
-
-    if (msg.state && msg.lat && msg.long && msg.count) {
-      console.log('[Map] INIT_DATA received', msg);
-      addPoints(msg.state, msg.lat, msg.long, msg.count);
-    }
-  });
-</script>
-
+      if (msg.type === "INIT_DATA" && msg.state && msg.lat && msg.long && msg.count) {
+        addPoints(msg.state, msg.lat, msg.long, msg.count);
+      }
+    });
+  </script>
 </body>
 </html>
